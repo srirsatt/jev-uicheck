@@ -1,0 +1,21 @@
+{
+  "name": "jev-uicheck",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Automatic UI verification for local agent-driven development",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "7.0.2"
+  }
+}
