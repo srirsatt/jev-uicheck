@@ -2,8 +2,6 @@ import type { Page } from 'playwright';
 
 // playwright ARIA snapshot capture - minimal snapshot as BEFORE & AFTER context into jev
 
-
-
 export interface PageState {
   url: string;
   title: string;
