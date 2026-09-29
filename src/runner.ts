@@ -8,6 +8,7 @@ import { diffPageStates } from './checks/diff.js';
 import { BaselineStore } from './store.js';
 import type { BaselineKey } from './store.js';
 import { evaluatePageHealth } from './checks/universal.js';
+import { buildIntentRequest } from './checks/questions.js';
 
 type CaptureStage = 'navigation' | 'readiness' | 'snapshot';
 type CaptureTimings = Record<CaptureStage | 'total', number>;
@@ -118,9 +119,13 @@ export async function captureAfter(
 ) {
   const baseline = await store.load(key);
   const capture = await runPageCapture(page, { ...options, url: key.url });
-  if (capture.status === 'incomplete') return { status: 'incomplete' as const, capture };
+  if (capture.status === 'incomplete') return {
+    status: 'incomplete' as const, capture, intent: buildIntentRequest(baseline, undefined),
+  };
   // Keep AFTER evidence for universal checks even if this route was discovered late.
-  if (!baseline) return { status: 'no-baseline' as const, capture };
+  if (!baseline) return {
+    status: 'no-baseline' as const, capture, intent: buildIntentRequest(undefined, undefined),
+  };
   const started = performance.now();
   const diff = diffPageStates(baseline.state, capture.state);
   return {
@@ -129,5 +134,6 @@ export async function captureAfter(
     capture,
     diff,
     diffMs: performance.now() - started,
+    intent: buildIntentRequest(baseline, diff),
   };
 }

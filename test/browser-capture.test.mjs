@@ -96,6 +96,8 @@ test('BEFORE survives edits and repairs, while missing or failed captures stay e
     controls = '<label><input type="checkbox">Remember me</label>'; // Accidentally removed login.
     const broken = await captureAfter(page, store, key, options);
     assert.equal(broken.status, 'compared');
+    assert.equal(broken.intent.status, 'ready');
+    assert.equal(JSON.parse(broken.intent.request.state).user_request, 'Add remember me');
     assert.ok(broken.diff.changes.some((change) => change.before.some((line) => line.text.includes('button "Log in"'))));
     const repeated = await captureBefore(page, store, key, 'Add remember me', options);
     assert.equal(repeated.status, 'existing');
@@ -111,6 +113,8 @@ test('BEFORE survives edits and repairs, while missing or failed captures stay e
     const lateKey = { ...key, url: 'http://fixture.test/new-route' };
     const late = await captureAfter(page, store, lateKey, options);
     assert.equal(late.status, 'no-baseline');
+    assert.equal(late.intent.status, 'cannot-evaluate');
+    assert.equal(late.intent.reason, 'no-baseline');
     assert.equal(await store.load(lateKey), undefined);
 
     const failedKey = { ...key, taskId: 'failed-prompt' };

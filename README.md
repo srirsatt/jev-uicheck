@@ -12,6 +12,8 @@ Early development: the page runner loads a URL, waits for an explicit visible el
 
 For local development, run `npm install`, then `npm run typecheck` or `npm run build`.
 
+`buildIntentRequest` prepares the saved prompt and computed diff for three Jev Choice questions: request satisfaction, unexpected changes, and regressions. `captureAfter` returns this preparation under `intent`. Each question allows `satisfied`, `violated`, or `insufficient_evidence`; all are advisory. The serialized state contains diff lines with BEFORE/AFTER references and changed URL/title metadata, not the full snapshots. Missing baselines, missing/incomplete diffs, and empty prompts return `cannot-evaluate` without a request. This is preparation only: no model is called, no verdict is generated, and the future client must add provider/model selection, request-size validation, and authentication.
+
 For your own running app, use `npm run check -- http://localhost:3000/login --ready 'h1' --snapshot`. Choose a selector that identifies a visible element at the point you want to capture; the checker does not wait for later activity after capture finishes. The browser starts with a fresh context, without your existing login session. Add `--timeout 10000` for slower pages. No agent hooks or interaction scenarios run yet.
 
 For full JSON evidence, run `npm run build` followed by `node dist/cli.js <url> --ready '<selector>' --json`. Calling the compiled CLI directly avoids npm's build messages in JSON output. Reported timings cover capture and evaluation, excluding compilation and browser startup.
