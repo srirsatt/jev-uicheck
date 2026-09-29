@@ -10,7 +10,7 @@ export interface IntentQuestion {
   criteria: Record<IntentAnswer, string>;
 }
 
-// The future client adds the provider-specific model ID and authentication.
+// The client adds the model ID and authentication.
 export interface IntentRequest {
   state: string;
   questions: Record<IntentCheckId, IntentQuestion>;
