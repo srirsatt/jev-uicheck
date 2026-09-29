@@ -4,6 +4,9 @@ import { capturePageState } from './browser/capture-state.js';
 import type { PageState } from './browser/capture-state.js';
 import { collectBrowserEvents } from './browser/events.js';
 import type { BrowserEvidence } from './browser/events.js';
+import { diffPageStates } from './checks/diff.js';
+import { BaselineStore } from './store.js';
+import type { BaselineKey } from './store.js';
 
 type CaptureStage = 'navigation' | 'readiness' | 'snapshot';
 type CaptureTimings = Record<CaptureStage | 'total', number>;
@@ -75,4 +78,48 @@ export async function runPageCapture(
   }
 
   return { requestedUrl: options.url, ...outcome, evidence, timingsMs };
+}
+// adds captureBefore() and captureAfter() to check before and after ARIA states 
+// Call before edits. Repeated calls for the same task never replace its baseline.
+export async function captureBefore(
+  page: Page,
+  store: BaselineStore,
+  key: BaselineKey,
+  prompt: string,
+  options: Omit<CaptureOptions, 'url'>,
+) {
+  const existing = await store.load(key);
+  if (existing) {
+    if (existing.prompt !== prompt) throw new Error('A new user prompt needs a new task ID.');
+    return { status: 'existing' as const, baseline: existing };
+  }
+  const capture = await runPageCapture(page, { ...options, url: key.url });
+  if (capture.status === 'incomplete') return { status: 'incomplete' as const, capture };
+  const status = await store.save(key, prompt, capture.state);
+  const baseline = await store.load(key);
+  if (!baseline || baseline.prompt !== prompt) throw new Error('Baseline changed unexpectedly while saving.');
+  return { status, baseline, capture };
+}
+
+// Call after edits and again after repairs. All attempts use the original BEFORE.
+export async function captureAfter(
+  page: Page,
+  store: BaselineStore,
+  key: BaselineKey,
+  options: Omit<CaptureOptions, 'url'>,
+) {
+  const baseline = await store.load(key);
+  const capture = await runPageCapture(page, { ...options, url: key.url });
+  if (capture.status === 'incomplete') return { status: 'incomplete' as const, capture };
+  // Keep AFTER evidence for universal checks even if this route was discovered late.
+  if (!baseline) return { status: 'no-baseline' as const, capture };
+  const started = performance.now();
+  const diff = diffPageStates(baseline.state, capture.state);
+  return {
+    status: diff.status === 'complete' ? 'compared' as const : 'incomplete' as const,
+    baseline,
+    capture,
+    diff,
+    diffMs: performance.now() - started,
+  };
 }

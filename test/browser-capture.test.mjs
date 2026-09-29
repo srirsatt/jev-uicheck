@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { runPageCapture } from '../dist/runner.js';
+import { captureBefore, captureAfter, runPageCapture } from '../dist/runner.js';
+import { BaselineStore } from '../dist/store.js';
 
 test('captures real browser failures, handles timeouts, and isolates repeated runs', async () => {
   const browser = await chromium.launch();
@@ -68,5 +72,53 @@ test('captures real browser failures, handles timeouts, and isolates repeated ru
     assert.deepEqual(listenerCounts(), originalCounts);
   } finally {
     await browser.close();
+  }
+});
+
+test('BEFORE survives edits and repairs, while missing or failed captures stay explicit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jev-comparison-'));
+  let browser;
+  try {
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    let controls = '<button>Log in</button>';
+    await page.route('http://fixture.test/**', (route) => route.fulfill({
+      contentType: 'text/html', body: `<h1>Login</h1>${controls}`,
+    }));
+    const store = new BaselineStore(directory);
+    const key = { taskId: 'prompt-1', checkpointId: 'desktop-logged-out', url: 'http://fixture.test/login' };
+    const options = { ready: page.getByRole('heading', { name: 'Login', exact: true }) };
+    const before = await captureBefore(page, store, key, 'Add remember me', options);
+    assert.equal(before.status, 'saved');
+
+    controls = '<label><input type="checkbox">Remember me</label>'; // Accidentally removed login.
+    const broken = await captureAfter(page, store, key, options);
+    assert.equal(broken.status, 'compared');
+    assert.ok(broken.diff.changes.some((change) => change.before.some((line) => line.text.includes('button "Log in"'))));
+    const repeated = await captureBefore(page, store, key, 'Add remember me', options);
+    assert.equal(repeated.status, 'existing');
+    assert.deepEqual(repeated.baseline, before.baseline);
+
+    controls += '<button>Log in</button>'; // Repair restores the original control.
+    const repaired = await captureAfter(page, store, key, options);
+    assert.equal(repaired.status, 'compared');
+    assert.deepEqual(repaired.baseline, before.baseline);
+    assert.ok(repaired.diff.changes.every((change) => change.kind === 'added'));
+    assert.ok(repaired.diff.changes.some((change) => change.after.some((line) => line.text.includes('Remember me'))));
+
+    const lateKey = { ...key, url: 'http://fixture.test/new-route' };
+    const late = await captureAfter(page, store, lateKey, options);
+    assert.equal(late.status, 'no-baseline');
+    assert.equal(await store.load(lateKey), undefined);
+
+    const failedKey = { ...key, taskId: 'failed-prompt' };
+    const failed = await captureBefore(page, store, failedKey, 'New prompt', {
+      ready: page.getByRole('heading', { name: 'Missing' }), timeoutMs: 500,
+    });
+    assert.equal(failed.status, 'incomplete');
+    assert.equal(await store.load(failedKey), undefined);
+  } finally {
+    await browser?.close();
+    await rm(directory, { recursive: true, force: true });
   }
 });
