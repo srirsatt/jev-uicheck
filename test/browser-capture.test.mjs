@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { captureBefore, captureAfter, runPageCapture } from '../dist/runner.js';
+import { captureBefore, captureAfter, runHealthCheck, runPageCapture } from '../dist/runner.js';
 import { BaselineStore } from '../dist/store.js';
 
 test('captures real browser failures, handles timeouts, and isolates repeated runs', async () => {
@@ -37,7 +37,7 @@ test('captures real browser failures, handles timeouts, and isolates repeated ru
     const eventNames = ['console', 'pageerror', 'requestfailed', 'response'];
     const listenerCounts = () => eventNames.map((name) => page.listenerCount(name));
     const originalCounts = listenerCounts();
-    const result = await runPageCapture(page, {
+    const { capture: result, report } = await runHealthCheck(page, {
       url: 'http://fixture.test/broken',
       ready: page.getByRole('heading', { name: 'Ready', exact: true }),
     });
@@ -50,6 +50,8 @@ test('captures real browser failures, handles timeouts, and isolates repeated ru
     assert.ok(events.some((e) => e.kind === 'http-error' && e.status === 503 && e.url.endsWith('/api')));
     assert.ok(events.some((e) => e.kind === 'request-failed' && e.url.endsWith('/offline')));
     assert.ok(!events.some((e) => e.kind === 'request-failed' && e.url.endsWith('/api')));
+    assert.equal(report.status, 'fail');
+    assert.equal(report.checks.filter((check) => check.status === 'fail').length, 4);
     assert.deepEqual(listenerCounts(), originalCounts);
     assert.ok(Object.values(result.timingsMs).every((ms) => ms >= 0));
 

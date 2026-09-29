@@ -7,6 +7,7 @@ import type { BrowserEvidence } from './browser/events.js';
 import { diffPageStates } from './checks/diff.js';
 import { BaselineStore } from './store.js';
 import type { BaselineKey } from './store.js';
+import { evaluatePageHealth } from './checks/universal.js';
 
 type CaptureStage = 'navigation' | 'readiness' | 'snapshot';
 type CaptureTimings = Record<CaptureStage | 'total', number>;
@@ -79,6 +80,13 @@ export async function runPageCapture(
 
   return { requestedUrl: options.url, ...outcome, evidence, timingsMs };
 }
+
+/** Capture a page and evaluate its current health; no Jev call or baseline required. */
+export async function runHealthCheck(page: Page, options: CaptureOptions) {
+  const capture = await runPageCapture(page, options);
+  return { capture, report: evaluatePageHealth(capture) };
+}
+
 // adds captureBefore() and captureAfter() to check before and after ARIA states 
 // Call before edits. Repeated calls for the same task never replace its baseline.
 export async function captureBefore(
