@@ -1,4 +1,12 @@
 import type { CheckEvidence, CheckStatus, HealthReport } from './checks/universal.js';
+import type { IntentCheckId } from './checks/questions.js';
+import type { JevResult } from './jev.js';
+
+export interface CombinedReport {
+  health: HealthReport;
+  jev: JevResult;
+  timingsMs: { total: number; diff: number; jev: number };
+}
 
 const symbols: Record<CheckStatus, string> = { pass: '✓', fail: '✗', uncertain: '?' };
 
@@ -48,4 +56,46 @@ export function formatHealthReport(report: HealthReport): string {
 /** Ordinary CLI codes; future agent adapters must translate these to hook semantics. */
 export function healthExitCode(report: HealthReport): 0 | 1 | 2 {
   return report.status === 'pass' ? 0 : report.status === 'fail' ? 1 : 2;
+}
+
+/** Jev remains advisory regardless of its choice, confidence, or availability. */
+export function combinedExitCode(report: CombinedReport): 0 | 1 | 2 {
+  return healthExitCode(report.health);
+}
+
+export function formatCombinedReport(
+  report: CombinedReport,
+  options: { includeEvidence?: boolean } = {},
+): string {
+  const lines = [
+    `UI check (${(report.timingsMs.total / 1_000).toFixed(2)}s total)`,
+    formatHealthReport(report.health),
+    '',
+  ];
+  const { jev } = report;
+  if (jev.status !== 'evaluated') {
+    lines.push(`? Jev advisory — ${jev.status}: ${oneLine(jev.message)}`);
+    lines.push('  No semantic verdict is available; this is not a semantic pass.');
+  } else {
+    lines.push(`? Jev advisory — ${oneLine(jev.response.model)} (${(jev.durationMs / 1_000).toFixed(2)}s)`);
+    const labels: Record<IntentCheckId, string> = {
+      intent: 'Prompt intent',
+      unexpectedChanges: 'Unexpected changes',
+      regression: 'Regression',
+    };
+    for (const id of Object.keys(labels) as IntentCheckId[]) {
+      const answer = jev.response.answers[id];
+      const choice = answer.choice === 'insufficient_evidence' ? 'insufficient evidence' : answer.choice;
+      // Show the actual distribution values. No unbenchmarked confidence threshold.
+      lines.push(`  ? ${labels[id]}: ${choice} (probability ${answer.probabilities[answer.choice].toFixed(3)}, confidence ${answer.confidence.toFixed(3)})`);
+    }
+    if (options.includeEvidence) {
+      lines.push('', '  Input evidence shared by the three questions (not per-answer citations):');
+      for (const line of jev.evidenceState.split('\n')) lines.push(`    ${oneLine(line)}`);
+    } else {
+      lines.push('  Exact input evidence: report.jev.evidenceState; use includeEvidence to display it.');
+    }
+  }
+  lines.push(`Exit code: ${combinedExitCode(report)} (browser health only; Jev is advisory).`);
+  return lines.join('\n');
 }

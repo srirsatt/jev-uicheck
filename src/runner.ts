@@ -9,6 +9,9 @@ import { BaselineStore } from './store.js';
 import type { BaselineKey } from './store.js';
 import { evaluatePageHealth } from './checks/universal.js';
 import { buildIntentRequest } from './checks/questions.js';
+import { evaluateIntent } from './jev.js';
+import type { JevOptions } from './jev.js';
+import type { CombinedReport } from './report.js';
 
 type CaptureStage = 'navigation' | 'readiness' | 'snapshot';
 type CaptureTimings = Record<CaptureStage | 'total', number>;
@@ -136,4 +139,32 @@ export async function captureAfter(
     diffMs: performance.now() - started,
     intent: buildIntentRequest(baseline, diff),
   };
+}
+
+/** Explicit combined run: one AFTER capture, health checks, and one batched Jev call.
+ * Missing/incomplete comparison evidence skips Jev without a network request.
+ */
+
+// get after, check wit before
+export async function runCombinedCheck(
+  page: Page,
+  store: BaselineStore,
+  key: BaselineKey,
+  options: Omit<CaptureOptions, 'url'>,
+  jevOptions: JevOptions = {},
+) {
+  const started = performance.now();
+  const comparison = await captureAfter(page, store, key, options);
+  const health = evaluatePageHealth(comparison.capture);
+  const jev = await evaluateIntent(comparison.intent, jevOptions);
+  const report: CombinedReport = {
+    health,
+    jev,
+    timingsMs: {
+      total: performance.now() - started,
+      diff: comparison.diffMs ?? 0,
+      jev: jev.durationMs,
+    },
+  };
+  return { comparison, report };
 }

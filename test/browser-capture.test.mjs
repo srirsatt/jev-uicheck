@@ -4,7 +4,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { captureBefore, captureAfter, runHealthCheck, runPageCapture } from '../dist/runner.js';
+import { captureBefore, captureAfter, runCombinedCheck, runHealthCheck, runPageCapture } from '../dist/runner.js';
+import { combinedExitCode, formatCombinedReport } from '../dist/report.js';
 import { BaselineStore } from '../dist/store.js';
 
 test('captures real browser failures, handles timeouts, and isolates repeated runs', async () => {
@@ -94,7 +95,30 @@ test('BEFORE survives edits and repairs, while missing or failed captures stay e
     assert.equal(before.status, 'saved');
 
     controls = '<label><input type="checkbox">Remember me</label>'; // Accidentally removed login.
-    const broken = await captureAfter(page, store, key, options);
+    let jevCalls = 0;
+    const jevOptions = {
+      apiKey: 'test-only-key',
+      fetchImpl: async (_url, request) => {
+        jevCalls++;
+        const input = JSON.parse(request.body);
+        assert.ok(input.state.includes('Remember me'));
+        return Response.json({
+          model: 'jev-1.13.0', usage: { input_tokens: 100, output_tokens: 20 },
+          answers: Object.fromEntries(Object.keys(input.questions).map((id) => [id, {
+            type: 'choice', choice: 'violated', confidence: 1,
+            probabilities: { satisfied: 0, violated: 1, insufficient_evidence: 0 },
+          }])),
+        });
+      },
+    };
+    const { comparison: broken, report: combined } = await runCombinedCheck(page, store, key, options, jevOptions);
+    assert.equal(jevCalls, 1);
+    assert.equal(combined.health.status, 'pass');
+    assert.equal(combined.jev.status, 'evaluated');
+    assert.equal(combinedExitCode(combined), 0); // Even a certain model violation is advisory.
+    assert.equal(combined.jev.evidenceState, broken.intent.request.state);
+    assert.match(formatCombinedReport(combined), /\? Prompt intent: violated/);
+    assert.ok(combined.timingsMs.total >= combined.timingsMs.jev);
     assert.equal(broken.status, 'compared');
     assert.equal(broken.intent.status, 'ready');
     assert.equal(JSON.parse(broken.intent.request.state).user_request, 'Add remember me');
@@ -111,7 +135,9 @@ test('BEFORE survives edits and repairs, while missing or failed captures stay e
     assert.ok(repaired.diff.changes.some((change) => change.after.some((line) => line.text.includes('Remember me'))));
 
     const lateKey = { ...key, url: 'http://fixture.test/new-route' };
-    const late = await captureAfter(page, store, lateKey, options);
+    const { comparison: late, report: lateReport } = await runCombinedCheck(page, store, lateKey, options, jevOptions);
+    assert.equal(jevCalls, 1); // Missing baseline must not produce a model request.
+    assert.equal(lateReport.jev.status, 'skipped');
     assert.equal(late.status, 'no-baseline');
     assert.equal(late.intent.status, 'cannot-evaluate');
     assert.equal(late.intent.reason, 'no-baseline');
@@ -123,6 +149,13 @@ test('BEFORE survives edits and repairs, while missing or failed captures stay e
     });
     assert.equal(failed.status, 'incomplete');
     assert.equal(await store.load(failedKey), undefined);
+
+    const incompleteRun = await runCombinedCheck(page, store, key, {
+      ready: page.getByRole('heading', { name: 'Missing' }), timeoutMs: 100,
+    }, jevOptions);
+    assert.equal(incompleteRun.report.jev.status, 'skipped');
+    assert.equal(combinedExitCode(incompleteRun.report), 2);
+    assert.equal(jevCalls, 1);
   } finally {
     await browser?.close();
     await rm(directory, { recursive: true, force: true });
