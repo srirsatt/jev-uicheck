@@ -4,10 +4,28 @@
   "private": true,
   "description": "Automatic UI verification for local agent-driven development",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "jev-uicheck-fast": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "benchmarks/README.md",
+    "benchmarks/RESULTS.md"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
+    "prepack": "npm run build",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
