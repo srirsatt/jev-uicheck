@@ -1,5 +1,5 @@
 {
-  "name": "jev-uicheck",
+  "name": "jev-uicheck-fast",
   "version": "0.0.0",
   "private": true,
   "description": "Automatic UI verification for local agent-driven development",

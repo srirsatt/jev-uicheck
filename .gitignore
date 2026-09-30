@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.jev-uicheck/
+.jev-uicheck-fast/
 .env
 .env.*
 !.env.example
