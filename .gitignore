@@ -1,5 +1,6 @@
 node_modules/
 dist/
+benchmarks/results/
 .jev-uicheck-fast/
 .env
 .env.*

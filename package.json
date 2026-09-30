@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
     "check": "npm run build && node dist/cli.js",
-    "check:jev": "npm run build && node --env-file=.env scripts/check-jev.mjs"
+    "check:jev": "npm run build && node --env-file=.env scripts/check-jev.mjs",
+    "bench": "npm run build && node benchmarks/run.mjs"
   },
   "dependencies": {
     "diff": "9.0.0",

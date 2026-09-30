@@ -28,4 +28,8 @@ For full JSON evidence, run `npm run build` followed by `node dist/cli.js <url> 
 
 Run `npx playwright install chromium --only-shell` once to install the test browser, then `npm test` for the local tests. These use mocked Jev responses and require no API key; only `check:jev` contacts the real service.
 
+For repeatable accuracy/latency experiments, see [the controlled benchmark](benchmarks/README.md). `npm run bench -- --repeats 1` validates fixtures offline; `npm run bench -- --live --repeats 3` uses real Jev calls and saves reports, CSV, and raw evidence under `benchmarks/results/`.
+
+The [initial recorded benchmark](benchmarks/RESULTS.md) ran 30 synthetic cases three times: warm combined latency was 192 ms median / 273 ms p95. First-pass primary judgments agreed with predeclared agent-authored labels on 24/30 cases, detected 12/12 seeded violations, and abstained on 13/30. One unobservable visual case received an unsupported violation. This is a small fixture experiment, not independently validated real-app accuracy; Jev remains advisory.
+
 jev-uicheck-fast is an unofficial community project and is not affiliated with or endorsed by TypeSafe.
